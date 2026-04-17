@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>nostrlens — image text search</title>
+<meta name="description" content="Search text inside images on Nostr using OCR. Find posts by what's written in the photos." />
+<meta property="og:title" content="nostrlens — image text search" />
+<meta property="og:description" content="Search text inside images on Nostr using OCR. Find posts by what's written in the photos." />
+<meta property="og:image" content="og-preview.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="nostrlens — image text search" />
+<meta name="twitter:description" content="Search text inside images on Nostr using OCR." />
+<meta name="twitter:image" content="og-preview.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0e10;
+    --bg2: #16161a;
+    --bg3: #1e1e24;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8e6f0;
+    --text2: #8a88a0;
+    --text3: #52505e;
+    --accent: #8b5cf6;
+    --accent2: #a78bfa;
+    --accent-bg: rgba(139,92,246,0.12);
+    --accent-border: rgba(139,92,246,0.3);
+    --green: #34d399;
+    --green-bg: rgba(52,211,153,0.1);
+    --amber: #fbbf24;
+    --amber-bg: rgba(251,191,36,0.1);
+    --red: #f87171;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+    --serif: 'Instrument Serif', serif;
+    --r: 8px;
+    --r2: 12px;
+  }
+
+  html { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; min-height: 100vh; }
+  body { max-width: 1000px; margin: 0 auto; padding: 28px 20px 80px; }
+
+  /* ── header ── */
+  .wordmark { font-family: var(--serif); font-size: 22px; letter-spacing: -0.3px; color: var(--text); margin-bottom: 24px; display: flex; align-items: baseline; gap: 6px; }
+  .wordmark em { font-style: italic; color: var(--accent2); }
+  .wordmark small { font-family: var(--sans); font-size: 11px; color: var(--text3); font-weight: 400; letter-spacing: 0; }
+  .version-badge { font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 99px; background: var(--accent-bg); border: 1px solid var(--accent-border); color: var(--accent2); margin-left: 2px; }
+
+  /* ── cards ── */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 16px; margin-bottom: 12px; }
+  .card-title { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); font-weight: 500; margin-bottom: 10px; }
+
+  /* ── nip07 banner ── */
+  .nip07-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: var(--r); padding: 9px 14px; margin-bottom: 10px; font-size: 12px; color: var(--accent2); flex-wrap: wrap; }
+  .btn-ext { background: var(--accent); border-color: var(--accent); color: #fff; height: 30px; padding: 0 14px; font-size: 12px; border-radius: var(--r); border: 1px solid; cursor: pointer; font-family: var(--sans); transition: all .15s; }
+  .btn-ext:hover { background: var(--accent2); border-color: var(--accent2); }
+
+  /* ── identity ── */
+  .id-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .id-row input { flex: 1; min-width: 220px; height: 36px; padding: 0 12px; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); font-family: var(--mono); font-size: 12px; color: var(--text); outline: none; transition: border-color .15s; }
+  .id-row input:focus { border-color: var(--accent); }
+  .id-hint { font-size: 11px; color: var(--text3); margin-top: 8px; }
+  .id-status { font-size: 11px; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
+  .id-status.ok   { background: var(--green-bg); color: var(--green); }
+  .id-status.warn { background: var(--amber-bg); color: var(--amber); }
+
+  /* ── relays ── */
+  .relay-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .relay-item { display: flex; align-items: center; gap: 9px; padding: 7px 10px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; transition: background .3s; }
+  .dot.connected  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.connecting { background: var(--amber); }
+  .dot.error      { background: var(--red); }
+  .dot.idle       { background: var(--text3); }
+  .relay-url { font-family: var(--mono); font-size: 11px; color: var(--text2); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .relay-tag { font-size: 10px; padding: 1px 7px; border-radius: 99px; background: var(--bg); border: 1px solid var(--border); color: var(--text3); }
+  .relay-remove { font-size: 16px; color: var(--text3); cursor: pointer; line-height: 1; padding: 0 2px; background: none; border: none; transition: color .15s; }
+  .relay-remove:hover { color: var(--red); }
+  .relay-add-row { display: flex; gap: 8px; }
+  .relay-add-row input { flex: 1; height: 32px; padding: 0 10px; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); font-family: var(--mono); font-size: 11px; color: var(--text); outline: none; }
+  .relay-add-row input:focus { border-color: var(--accent); }
+  .relay-count { font-size: 11px; color: var(--text3); margin-left: 4px; }
+
+  /* ── fetch controls ── */
+  .fetch-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .fetch-controls label:first-of-type { font-size: 11px; color: var(--text3); }
+  .select-sm { height: 28px; padding: 0 8px; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); font-family: var(--mono); font-size: 11px; color: var(--text2); outline: none; cursor: pointer; }
+  .select-sm:focus { border-color: var(--accent); }
+  .toggle-label { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text3); cursor: pointer; user-select: none; }
+  .toggle-label input[type=checkbox] { accent-color: var(--accent); width: 13px; height: 13px; cursor: pointer; }
+
+  /* ── search bar ── */
+  .search-section { margin-bottom: 16px; }
+  .search-row { display: flex; gap: 8px; margin-bottom: 6px; }
+  .search-input-wrap { flex: 1; position: relative; }
+  .search-input-wrap svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; }
+  .search-input-wrap input { width: 100%; height: 42px; padding: 0 14px 0 38px; background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r2); font-family: var(--sans); font-size: 15px; color: var(--text); outline: none; transition: border-color .15s; }
+  .search-input-wrap input:focus { border-color: var(--accent); background: var(--bg3); }
+  .search-input-wrap input::placeholder { color: var(--text3); }
+  .search-hint { font-size: 10px; color: var(--text3); margin-bottom: 10px; }
+  .search-hint code { font-family: var(--mono); }
+
+  /* ── buttons ── */
+  .btn { height: 36px; padding: 0 16px; border-radius: var(--r); border: 1px solid var(--border2); background: transparent; color: var(--text2); font-family: var(--sans); font-size: 13px; cursor: pointer; transition: all .15s; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; }
+  .btn:hover { background: var(--bg3); color: var(--text); }
+  .btn:active { transform: scale(0.98); }
+  .btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; height: 42px; padding: 0 20px; font-size: 14px; }
+  .btn-accent:hover { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+  .btn-sm { height: 28px; padding: 0 10px; font-size: 11px; }
+  .btn-pause { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+  .btn-pause:hover { background: var(--amber); color: #0e0e10; }
+  .btn-nostr { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent2); }
+  .btn-nostr:hover { background: var(--accent); color: #fff; }
+
+  /* ── filters ── */
+  .filter-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 12px; padding: 4px 12px; border-radius: 99px; border: 1px solid var(--border); color: var(--text3); cursor: pointer; background: transparent; transition: all .15s; font-family: var(--sans); }
+  .chip:hover { border-color: var(--border2); color: var(--text2); }
+  .chip.active { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent2); }
+
+  /* ── progress ── */
+  .progress-bar { margin-bottom: 16px; }
+  .progress-info { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text3); margin-bottom: 5px; }
+  .progress-right { display: flex; align-items: center; gap: 8px; }
+  .track { height: 3px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
+  .fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 99px; transition: width .4s ease; }
+
+  /* ── results ── */
+  .results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 12px; color: var(--text3); }
+  .results-actions { display: flex; gap: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .img-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); overflow: hidden; cursor: pointer; transition: border-color .15s, transform .15s; }
+  .img-card:hover { border-color: var(--border2); transform: translateY(-1px); }
+  .thumb { width: 100%; aspect-ratio: 4/3; background: var(--bg3); position: relative; overflow: hidden; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: filter .15s; }
+  .thumb-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text3); }
+  .match-badge { position: absolute; top: 7px; right: 7px; font-size: 10px; padding: 2px 7px; border-radius: 99px; background: rgba(139,92,246,0.85); color: #fff; backdrop-filter: blur(4px); font-family: var(--mono); }
+  .ocr-overlay { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(14,14,16,0.92)); padding: 20px 8px 6px; }
+  .ocr-snippet { font-size: 10px; font-family: var(--mono); color: rgba(255,255,255,0.7); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; }
+  .ocr-snippet mark { background: rgba(139,92,246,0.45); color: #fff; border-radius: 2px; padding: 0 1px; }
+  .img-footer { padding: 8px 10px; }
+  .img-author { font-family: var(--mono); font-size: 10px; color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .img-time { font-size: 10px; color: var(--text3); }
+
+  /* ── empty state ── */
+  .empty { text-align: center; padding: 60px 20px; color: var(--text3); }
+  .empty .icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+  .empty p { font-size: 13px; line-height: 1.6; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+
+  /* ── toast ── */
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--bg2); border: 1px solid var(--border2); color: var(--text); font-size: 12px; padding: 8px 16px; border-radius: 99px; pointer-events: none; opacity: 0; transition: opacity .25s; font-family: var(--mono); z-index: 100; white-space: nowrap; }
+  #toast.show { opacity: 1; }
+
+  /* ── modal ── */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.82); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; backdrop-filter: blur(6px); }
+  .modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 16px; max-width: 700px; width: 100%; max-height: 90vh; overflow-y: auto; }
+  .modal-img { width: 100%; display: block; border-radius: 12px 12px 0 0; }
+  .modal-body { padding: 16px; }
+  .modal-actions { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .modal-ocr { font-family: var(--mono); font-size: 12px; color: var(--text2); line-height: 1.7; white-space: pre-wrap; word-break: break-word; background: var(--bg3); border-radius: var(--r); padding: 12px; max-height: 200px; overflow-y: auto; margin-bottom: 12px; }
+  .modal-ocr mark { background: rgba(139,92,246,0.35); color: var(--accent2); border-radius: 2px; padding: 0 2px; }
+  .modal-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--text3); font-family: var(--mono); align-items: center; }
+  .modal-close { float: right; background: none; border: none; color: var(--text3); font-size: 20px; cursor: pointer; margin-top: -2px; }
+  .modal-close:hover { color: var(--text); }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 99px; }
+</style>
+</head>
+<body>
+
+<div class="wordmark">nostr<em>lens</em> <small>image text search</small> <span class="version-badge">v1.0</span></div>
+
+<!-- Identity -->
+<div class="card">
+  <div class="card-title">Identity</div>
+  <div id="nip07Banner" style="display:none" class="nip07-banner">
+    <span>⚡ Nostr extension detected (Alby, nos2x, Amber)</span>
+    <button class="btn-ext" onclick="loginNip07()">Connect with Extension</button>
+  </div>
+  <div class="id-row">
+    <input id="npubInput" type="text" placeholder="npub1… or user@domain.com" spellcheck="false" autocomplete="off" onkeydown="if(event.key==='Enter') loadIdentity()" />
+    <button class="btn" onclick="loadIdentity()">Load</button>
+    <span id="idStatus" class="id-status warn">not loaded</span>
+  </div>
+  <div class="id-hint">Enter your npub or NIP-05 identifier (e.g. you@domain.com). Your keys never leave your browser.</div>
+</div>
+
+<!-- Relays -->
+<div class="card">
+  <div class="card-title">Relays <span id="relayCount" class="relay-count"></span></div>
+  <div id="relayList" class="relay-list"></div>
+  <div class="relay-add-row">
+    <input id="newRelay" type="text" placeholder="wss://relay.example.com" spellcheck="false" onkeydown="if(event.key==='Enter') addRelay()" />
+    <button class="btn btn-sm" onclick="addRelay()">+ Add</button>
+    <button class="btn btn-sm" onclick="connectAll()">Connect all</button>
+  </div>
+  <div class="fetch-controls">
+    <label style="font-size:11px;color:var(--text3)">Fetch limit:</label>
+    <select id="fetchLimit" class="select-sm">
+      <option value="100">100 events</option>
+      <option value="250" selected>250 events</option>
+      <option value="500">500 events</option>
+      <option value="1000">1000 events</option>
+    </select>
+    <label class="toggle-label">
+      <input type="checkbox" id="hideNoText" onchange="applyHideNoText()" />
+      Hide images with no text
+    </label>
+  </div>
+</div>
+
+<!-- Search -->
+<div class="search-section">
+  <div class="search-row">
+    <div class="search-input-wrap">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="6.5" cy="6.5" r="4.5"/><line x1="10" y1="10" x2="14" y2="14"/>
+      </svg>
+      <input id="searchInput" type="text" placeholder="Search text inside images…" onkeydown="if(event.key==='Enter') doSearch()" />
+    </div>
+    <button class="btn btn-accent" onclick="doSearch()">Search</button>
+    <button class="btn" onclick="startFetch()" title="Fetch &amp; OCR images from relays">Fetch + OCR</button>
+  </div>
+  <div class="search-hint">Use <code>"exact phrase"</code> · space-separated words = AND · <code>word OR word</code> = OR</div>
+  <div class="filter-row">
+    <button class="chip active" onclick="setFilter('all',this)">All</button>
+    <button class="chip" onclick="setFilter('7d',this)">Last 7 days</button>
+    <button class="chip" onclick="setFilter('30d',this)">Last 30 days</button>
+    <button class="chip" onclick="setFilter('mine',this)">My posts</button>
+  </div>
+</div>
+
+<!-- Progress -->
+<div id="progressBar" class="progress-bar" style="display:none">
+  <div class="progress-info">
+    <span id="progressLabel">Fetching images…</span>
+    <div class="progress-right">
+      <button class="btn btn-sm btn-pause" id="pauseBtn" onclick="togglePause()">Pause</button>
+      <span id="progressPct">0%</span>
+    </div>
+  </div>
+  <div class="track"><div id="progressFill" class="fill" style="width:0%"></div></div>
+</div>
+
+<!-- Results -->
+<div class="results-header">
+  <span id="resultsLabel"></span>
+  <div class="results-actions">
+    <button class="btn btn-sm" onclick="exportResults()" style="display:none" id="exportBtn">Export JSON</button>
+    <button class="btn btn-sm" onclick="clearIndex()" style="display:none" id="clearBtn">Clear index</button>
+  </div>
+</div>
+<div id="grid" class="grid"></div>
+<div id="emptyState" class="empty">
+  <div class="icon">🔍</div>
+  <p>Enter your npub, connect to relays,<br>then click <strong>Fetch + OCR</strong> to index images.<br>Once indexed, search by text found inside them.</p>
+</div>
+
+<!-- Modal -->
+<div id="modal" class="modal-bg" style="display:none" onclick="closeModal(event)">
+  <div class="modal" id="modalInner">
+    <img id="modalImg" class="modal-img" src="" alt="" />
+    <div class="modal-body">
+      <button class="modal-close" onclick="document.getElementById('modal').style.display='none'">×</button>
+      <div class="modal-actions" id="modalActions"></div>
+      <div class="card-title" style="margin-bottom:8px">Extracted text</div>
+      <div id="modalOcr" class="modal-ocr"></div>
+      <div id="modalMeta" class="modal-meta"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Dependencies -->
+<script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.7.0/lib/nostr.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+const state = {
+  pubkey:       null,
+  relays:       [],     // { url, source, ws, status }
+  imageIndex:   [],     // { url, ocrText, pubkey, created_at, eventId }
+  filter:       'all',
+  fetching:     false,
+  paused:       false,
+  pauseResolve: null,
+  lastTerms:    null,
+};
+
+// ─── localStorage persistence ─────────────────────────────────────────────────
+function saveIndex() {
+  try { localStorage.setItem('nostrlens_index', JSON.stringify(state.imageIndex)); } catch(e) {}
+}
+function loadIndex() {
+  try {
+    const d = localStorage.getItem('nostrlens_index');
+    if (d) { state.imageIndex = JSON.parse(d); renderGrid(state.imageIndex); updateResultsLabel(); }
+  } catch(e) {}
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ─── NIP-07 Extension ────────────────────────────────────────────────────────
+async function loginNip07() {
+  try {
+    if (!window.nostr) return toast('No Nostr extension found');
+    const pubkey = await window.nostr.getPublicKey();
+    if (!pubkey) return toast('Extension did not return a public key');
+    state.pubkey = pubkey;
+    const npub = hexToNpub(pubkey);
+    const st = document.getElementById('idStatus');
+    st.textContent = 'connected · ' + npub.slice(0, 13) + '…';
+    st.className = 'id-status ok';
+    toast('Extension connected — fetching NIP-65 relays…');
+    await fetchNip65Relays(pubkey);
+  } catch(e) {
+    toast('Extension error: ' + e.message);
+  }
+}
+
+// ─── Identity ─────────────────────────────────────────────────────────────────
+async function loadIdentity() {
+  const val = document.getElementById('npubInput').value.trim();
+  const st  = document.getElementById('idStatus');
+  if (!val) return toast('Enter an npub or NIP-05 identifier');
+
+  st.textContent = 'loading…';
+  st.className = 'id-status warn';
+
+  try {
+    let pubkey;
+
+    if (val.includes('@')) {
+      toast('Resolving NIP-05…');
+      pubkey = await resolveNip05(val);
+    } else if (val.startsWith('npub')) {
+      const decoded = NostrTools.nip19.decode(val);
+      if (decoded.type !== 'npub') throw new Error('not a valid npub');
+      pubkey = decoded.data;
+    } else if (/^[0-9a-f]{64}$/i.test(val)) {
+      pubkey = val;
+    } else {
+      throw new Error('Enter an npub1… or user@domain.com');
+    }
+
+    state.pubkey = pubkey;
+    const npub = hexToNpub(pubkey);
+    st.textContent = 'loaded · ' + npub.slice(0, 13) + '…';
+    st.className = 'id-status ok';
+    toast('Identity loaded — fetching NIP-65 relays…');
+    await fetchNip65Relays(pubkey);
+  } catch(e) {
+    st.textContent = 'error';
+    st.className = 'id-status warn';
+    toast('Could not load: ' + e.message);
+  }
+}
+
+// ─── NIP-05 resolver ──────────────────────────────────────────────────────────
+async function resolveNip05(identifier) {
+  const [name, domain] = identifier.split('@');
+  if (!name || !domain) throw new Error('Invalid NIP-05 format');
+  const url = `https://${domain}/.well-known/nostr.json?name=${encodeURIComponent(name)}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`NIP-05 fetch failed (${resp.status})`);
+  const data = await resp.json();
+  const pubkey = data?.names?.[name];
+  if (!pubkey) throw new Error(`Name "${name}" not found at ${domain}`);
+  return pubkey;
+}
+
+// ─── Relay management ─────────────────────────────────────────────────────────
+const BOOTSTRAP_RELAYS = [
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+];
+
+async function fetchNip65Relays(pubkey) {
+  const found = new Set(state.relays.map(r => r.url));
+  for (const url of BOOTSTRAP_RELAYS) {
+    if (!found.has(url)) addRelayEntry(url, 'bootstrap', false);
+  }
+  renderRelayList();
+
+  let resolved = false;
+  const timeout = setTimeout(() => {
+    if (!resolved) { toast('NIP-65 timed out — using bootstrap relays'); }
+  }, 6000);
+
+  for (const r of BOOTSTRAP_RELAYS) {
+    try {
+      const events = await fetchEventsOnce(r, [{ kinds: [10002], authors: [pubkey], limit: 1 }], 4000);
+      if (events.length > 0) {
+        clearTimeout(timeout);
+        resolved = true;
+        const ev = events[0];
+        const relayUrls = ev.tags.filter(t => t[0] === 'r').map(t => t[1]);
+        const existing  = new Set(state.relays.map(r => r.url));
+        for (const u of relayUrls) {
+          if (!existing.has(u)) { addRelayEntry(u, 'nip-65', false); existing.add(u); }
+        }
+        renderRelayList();
+        toast(`NIP-65 loaded: ${relayUrls.length} relays`);
+        break;
+      }
+    } catch(e) {}
+  }
+}
+
+function addRelayEntry(url, source = 'custom', connect = false) {
+  if (state.relays.find(r => r.url === url)) { toast('Relay already in list'); return; }
+  if (!url.startsWith('wss://') && !url.startsWith('ws://')) { toast('URL must start with wss://'); return; }
+  state.relays.push({ url, source, ws: null, status: 'idle' });
+  if (connect) connectRelay(state.relays[state.relays.length - 1]);
+  renderRelayList();
+}
+
+function addRelay() {
+  const input = document.getElementById('newRelay');
+  const url = input.value.trim();
+  if (!url) return;
+  addRelayEntry(url, 'custom', true);
+  input.value = '';
+}
+
+function removeRelay(url) {
+  const r = state.relays.find(x => x.url === url);
+  if (r && r.ws) { try { r.ws.close(); } catch(e) {} }
+  state.relays = state.relays.filter(x => x.url !== url);
+  renderRelayList();
+}
+
+function connectRelay(r) {
+  if (r.ws && (r.ws.readyState === WebSocket.OPEN || r.ws.readyState === WebSocket.CONNECTING)) return;
+  r.status = 'connecting'; renderRelayList();
+  const ws = new WebSocket(r.url);
+  r.ws = ws;
+  ws.onopen  = () => { r.status = 'connected'; renderRelayList(); };
+  ws.onclose = () => { r.status = 'idle';      renderRelayList(); };
+  ws.onerror = () => { r.status = 'error';     renderRelayList(); };
+}
+
+function connectAll() {
+  state.relays.forEach(r => connectRelay(r));
+  toast('Connecting to all relays…');
+}
+
+function renderRelayList() {
+  const el  = document.getElementById('relayList');
+  const cnt = document.getElementById('relayCount');
+  const connected = state.relays.filter(r => r.status === 'connected').length;
+  cnt.textContent = `(${connected}/${state.relays.length} connected)`;
+  el.innerHTML = state.relays.map(r => `
+    <div class="relay-item">
+      <div class="dot ${r.status}"></div>
+      <span class="relay-url" title="${escHtml(r.url)}">${escHtml(r.url)}</span>
+      <span class="relay-tag">${escHtml(r.source)}</span>
+      <button class="relay-remove" onclick="removeRelay('${escAttr(r.url)}')" title="Remove">×</button>
+    </div>`).join('');
+}
+
+// ─── WebSocket helpers ────────────────────────────────────────────────────────
+function fetchEventsOnce(url, filters, timeoutMs = 8000) {
+  return new Promise(resolve => {
+    const ws = new WebSocket(url);
+    const events = [];
+    const subId  = Math.random().toString(36).slice(2, 10);
+    const timer  = setTimeout(() => { ws.close(); resolve(events); }, timeoutMs);
+    ws.onopen    = () => ws.send(JSON.stringify(['REQ', subId, ...filters]));
+    ws.onmessage = e => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg[0] === 'EVENT' && msg[1] === subId) events.push(msg[2]);
+        if (msg[0] === 'EOSE') { clearTimeout(timer); ws.close(); resolve(events); }
+      } catch(err) {}
+    };
+    ws.onerror = () => { clearTimeout(timer); resolve(events); };
+  });
+}
+
+// ─── Pause / Resume ───────────────────────────────────────────────────────────
+function togglePause() {
+  state.paused = !state.paused;
+  document.getElementById('pauseBtn').textContent = state.paused ? 'Resume' : 'Pause';
+  if (!state.paused && state.pauseResolve) {
+    state.pauseResolve();
+    state.pauseResolve = null;
+  }
+  toast(state.paused ? 'Paused — click Resume to continue' : 'Resumed');
+}
+
+async function waitIfPaused() {
+  if (!state.paused) return;
+  await new Promise(resolve => { state.pauseResolve = resolve; });
+}
+
+// ─── Fetch & OCR ──────────────────────────────────────────────────────────────
+function extractImageUrls(event) {
+  const urls  = [];
+  const imgRe = /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp|bmp)(?:\?\S*)?/gi;
+  let m;
+  while ((m = imgRe.exec(event.content || '')) !== null) urls.push(m[0]);
+  for (const tag of (event.tags || [])) {
+    if ((tag[0] === 'url' || tag[0] === 'image' || tag[0] === 'thumb') && tag[1]) {
+      if (/^https?:\/\//i.test(tag[1])) urls.push(tag[1]);
+    }
+    if (tag[0] === 'imeta') {
+      for (const part of tag.slice(1)) {
+        const kv = String(part).split(' ');
+        if (kv[0] === 'url' && kv[1]) urls.push(kv[1]);
+      }
+    }
+  }
+  return [...new Set(urls)];
+}
+
+async function startFetch() {
+  if (state.fetching) return toast('Already fetching — use Pause to stop');
+  if (!state.relays.length) return toast('Add at least one relay first');
+
+  state.fetching = true;
+  state.paused   = false;
+  document.getElementById('pauseBtn').textContent = 'Pause';
+  showProgress(true);
+  setProgressLabel('Connecting to relays…');
+
+  state.relays.forEach(r => connectRelay(r));
+  await sleep(1500);
+
+  setProgressLabel('Fetching events…');
+  setProgress(5);
+
+  const now = Math.floor(Date.now() / 1000);
+  let since;
+  if      (state.filter === '7d')  since = now - 7   * 86400;
+  else if (state.filter === '30d') since = now - 30  * 86400;
+  else                             since = now - 180 * 86400;
+
+  const limit   = parseInt(document.getElementById('fetchLimit').value) || 250;
+  const filters = [{ kinds: [1, 20], limit, since }];
+  if (state.filter === 'mine' && state.pubkey) filters[0].authors = [state.pubkey];
+
+  const relayUrls = state.relays.map(r => r.url);
+  const fetches   = relayUrls.map(url => fetchEventsOnce(url, filters, 10000).catch(() => []));
+  const results   = await Promise.all(fetches);
+
+  const seen = new Set();
+  const allEvents = [];
+  for (const evList of results) {
+    for (const ev of evList) {
+      if (!seen.has(ev.id)) { seen.add(ev.id); allEvents.push(ev); }
+    }
+  }
+
+  setProgressLabel(`Found ${allEvents.length} events — extracting images…`);
+  setProgress(15);
+
+  const seenUrls    = new Set(state.imageIndex.map(i => i.url));
+  const imageEntries = [];
+  for (const ev of allEvents) {
+    for (const url of extractImageUrls(ev)) {
+      if (!seenUrls.has(url)) {
+        seenUrls.add(url);
+        imageEntries.push({ url, pubkey: ev.pubkey, created_at: ev.created_at, eventId: ev.id, ocrText: '' });
+      }
+    }
+  }
+
+  if (!imageEntries.length) {
+    showProgress(false);
+    state.fetching = false;
+    toast('No new images found');
+    return;
+  }
+
+  setProgressLabel(`OCR-ing ${imageEntries.length} images…`);
+  setProgress(20);
+
+  const worker = await Tesseract.createWorker('eng', 1, { logger: () => {} });
+
+  for (let i = 0; i < imageEntries.length; i++) {
+    await waitIfPaused();
+
+    const entry = imageEntries[i];
+    const pct   = Math.round(20 + (i / imageEntries.length) * 78);
+    setProgress(pct);
+    setProgressLabel(`OCR ${i + 1} / ${imageEntries.length}: ${entry.url.split('/').pop().slice(0, 40)}`);
+
+    try {
+      const result = await worker.recognize(entry.url);
+      entry.ocrText = result.data.text.trim();
+    } catch(e) {
+      entry.ocrText = '';
+    }
+
+    state.imageIndex.push(entry);
+    saveIndex();
+    if (i % 5 === 0) renderGrid(state.imageIndex);
+  }
+
+  await worker.terminate();
+  setProgress(100);
+  setProgressLabel(`Done — ${state.imageIndex.length} images indexed`);
+  state.fetching = false;
+  state.paused   = false;
+  setTimeout(() => showProgress(false), 2000);
+  renderGrid(state.imageIndex);
+  updateResultsLabel();
+  toast(`Indexed ${imageEntries.length} new images`);
+}
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+function parseQuery(raw) {
+  const phrases = [];
+  let rest = raw.replace(/"([^"]+)"/g, (_, p) => { phrases.push(p.toLowerCase()); return ' '; }).trim();
+
+  if (/\bOR\b/i.test(rest)) {
+    const orGroups = rest.split(/\s+OR\s+/i).map(t => t.trim().toLowerCase()).filter(Boolean);
+    return { phrases, andTerms: [], orGroups };
+  }
+
+  const andTerms = rest.split(/\s+/).filter(Boolean).map(t => t.toLowerCase());
+  return { phrases, andTerms, orGroups: [] };
+}
+
+function matchesQuery(text, { phrases, andTerms, orGroups }) {
+  const lower = (text || '').toLowerCase();
+  if (phrases.some(p => !lower.includes(p)))                        return false;
+  if (andTerms.length && andTerms.some(t => !lower.includes(t)))    return false;
+  if (orGroups.length && !orGroups.some(t => lower.includes(t)))    return false;
+  return true;
+}
+
+function allQueryTerms({ phrases, andTerms, orGroups }) {
+  return [...phrases, ...andTerms, ...orGroups];
+}
+
+function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) {
+    state.lastTerms = null;
+    renderGrid(state.imageIndex);
+    updateResultsLabel();
+    history.replaceState(null, '', window.location.pathname);
+    return;
+  }
+
+  history.replaceState(null, '', '?q=' + encodeURIComponent(q));
+
+  const parsed       = parseQuery(q);
+  const terms        = allQueryTerms(parsed);
+  state.lastTerms    = terms;
+  const hideNoText   = document.getElementById('hideNoText').checked;
+
+  const results = state.imageIndex.filter(entry => {
+    if (hideNoText && !entry.ocrText) return false;
+    return matchesQuery(entry.ocrText, parsed);
+  });
+
+  renderGrid(results, terms);
+  document.getElementById('resultsLabel').textContent =
+    `${results.length} result${results.length !== 1 ? 's' : ''} for "${q}"`;
+}
+
+function applyHideNoText() {
+  if (document.getElementById('searchInput').value.trim()) doSearch();
+  else renderGrid(state.imageIndex);
+}
+
+// ─── Highlight helpers ────────────────────────────────────────────────────────
+function highlightText(text, terms) {
+  if (!terms || !terms.length) return escHtml(text);
+  let out = escHtml(text);
+  for (const t of terms) {
+    const re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+    out = out.replace(re, '<mark>$1</mark>');
+  }
+  return out;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escAttr(s) {
+  return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+
+function getSnippet(text, terms, len = 100) {
+  if (!terms || !terms.length) return text.slice(0, len);
+  const lower = text.toLowerCase();
+  let best = 0;
+  for (const t of terms) {
+    const idx = lower.indexOf(t);
+    if (idx !== -1) { best = Math.max(0, idx - 20); break; }
+  }
+  return text.slice(best, best + len);
+}
+
+// ─── Render grid ──────────────────────────────────────────────────────────────
+function renderGrid(entries, terms) {
+  const grid      = document.getElementById('grid');
+  const empty     = document.getElementById('emptyState');
+  const hideNoText = document.getElementById('hideNoText').checked;
+  const visible   = hideNoText ? entries.filter(e => e.ocrText) : entries;
+
+  if (!visible.length) {
+    grid.innerHTML = '';
+    empty.style.display = '';
+    const q = document.getElementById('searchInput').value.trim();
+    empty.querySelector('p').innerHTML = q
+      ? `No images with text matching "<strong>${escHtml(q)}</strong>".<br>Try different keywords.`
+      : 'Enter your npub, connect to relays,<br>then click <strong>Fetch + OCR</strong> to index images.<br>Once indexed, search by text found inside them.';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const parsed = terms ? { phrases: [], andTerms: terms, orGroups: [] } : null;
+  const sorted = [...visible].sort((a, b) => b.created_at - a.created_at);
+
+  grid.innerHTML = sorted.map(entry => {
+    const snippet     = entry.ocrText ? getSnippet(entry.ocrText, terms, 90) : '';
+    const highlighted = snippet ? highlightText(snippet, terms) : '';
+    const time        = timeAgo(entry.created_at);
+    const npub        = entry.pubkey ? hexToNpub(entry.pubkey).slice(0, 14) + '…' : '?';
+    const hasMatch    = parsed && entry.ocrText && matchesQuery(entry.ocrText, parsed);
+    const entryEnc    = encodeURIComponent(JSON.stringify(entry));
+    const termsEnc    = encodeURIComponent(JSON.stringify(terms || []));
+    return `
+    <div class="img-card" onclick="openModal(JSON.parse(decodeURIComponent('${escAttr(entryEnc)}')), JSON.parse(decodeURIComponent('${escAttr(termsEnc)}')))">
+      <div class="thumb">
+        <img src="${escHtml(entry.url)}" alt="" loading="lazy"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+        <div class="thumb-placeholder" style="display:none">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".3">
+            <rect x="2" y="5" width="24" height="18" rx="3"/>
+            <circle cx="9" cy="11" r="2.5"/>
+            <path d="M2 20l6-5 5 4 4-3 9 5"/>
+          </svg>
+        </div>
+        ${hasMatch ? '<span class="match-badge">match</span>' : ''}
+        ${highlighted ? `<div class="ocr-overlay"><div class="ocr-snippet">${highlighted}</div></div>` : ''}
+      </div>
+      <div class="img-footer">
+        <div class="img-author">${escHtml(npub)}</div>
+        <div class="img-time">${time}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
+function openModal(entry, terms) {
+  document.getElementById('modal').style.display = 'flex';
+  document.getElementById('modalImg').src = entry.url;
+
+  const ocr  = entry.ocrText || '(no text detected)';
+  document.getElementById('modalOcr').innerHTML = highlightText(ocr, terms);
+
+  const npub   = entry.pubkey ? hexToNpub(entry.pubkey) : '?';
+  const noteId = (() => {
+    try { return entry.eventId ? NostrTools.nip19.noteEncode(entry.eventId) : null; } catch(e) { return null; }
+  })();
+  const njumpUrl = noteId ? `https://njump.me/${noteId}` : null;
+
+  document.getElementById('modalActions').innerHTML = `
+    <a href="${escHtml(entry.url)}" target="_blank" rel="noopener" class="btn btn-sm">Open image ↗</a>
+    ${njumpUrl ? `<a href="${escHtml(njumpUrl)}" target="_blank" rel="noopener" class="btn btn-sm btn-nostr">View on Nostr ↗</a>` : ''}
+  `;
+
+  document.getElementById('modalMeta').innerHTML = `
+    <span title="${escHtml(entry.pubkey || '')}">Author: ${escHtml(npub.slice(0, 20))}…</span>
+    <span>${timeAgo(entry.created_at)}</span>
+  `;
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('modal'))
+    document.getElementById('modal').style.display = 'none';
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+function exportResults() {
+  const q    = document.getElementById('searchInput').value.trim();
+  const data = q
+    ? state.imageIndex.filter(e => matchesQuery(e.ocrText, parseQuery(q)))
+    : state.imageIndex;
+
+  const out = data.map(e => ({
+    url:        e.url,
+    ocrText:    e.ocrText,
+    author:     e.pubkey ? hexToNpub(e.pubkey) : e.pubkey,
+    created_at: e.created_at,
+    eventId:    e.eventId,
+    njump:      (() => { try { return e.eventId ? 'https://njump.me/' + NostrTools.nip19.noteEncode(e.eventId) : null; } catch(x) { return null; } })(),
+  }));
+
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `nostrlens-export-${Date.now()}.json`;
+  a.click();
+  toast(`Exported ${out.length} entries`);
+}
+
+// ─── Filters ──────────────────────────────────────────────────────────────────
+function setFilter(f, el) {
+  state.filter = f;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ─── Progress helpers ─────────────────────────────────────────────────────────
+function showProgress(show) { document.getElementById('progressBar').style.display = show ? '' : 'none'; }
+function setProgress(pct)   { document.getElementById('progressFill').style.width = pct + '%'; document.getElementById('progressPct').textContent = pct + '%'; }
+function setProgressLabel(msg) { document.getElementById('progressLabel').textContent = msg; }
+
+function updateResultsLabel() {
+  const lbl  = document.getElementById('resultsLabel');
+  const show = state.imageIndex.length > 0;
+  lbl.textContent = show ? `${state.imageIndex.length} images indexed` : '';
+  document.getElementById('clearBtn').style.display  = show ? '' : 'none';
+  document.getElementById('exportBtn').style.display = show ? '' : 'none';
+}
+
+function clearIndex() {
+  if (!confirm('Clear all indexed images? This cannot be undone.')) return;
+  state.imageIndex = [];
+  localStorage.removeItem('nostrlens_index');
+  renderGrid([]);
+  updateResultsLabel();
+  toast('Index cleared');
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function hexToNpub(hex) {
+  try { return NostrTools.nip19.npubEncode(hex); } catch(e) { return hex; }
+}
+
+function timeAgo(ts) {
+  const diff = Math.floor(Date.now() / 1000) - ts;
+  if (diff < 60)    return diff + 's ago';
+  if (diff < 3600)  return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+function init() {
+  if (window.nostr) document.getElementById('nip07Banner').style.display = 'flex';
+
+  const params = new URLSearchParams(window.location.search);
+  const q      = params.get('q');
+  if (q) document.getElementById('searchInput').value = q;
+
+  loadIndex();
+  renderRelayList();
+
+  if (q && state.imageIndex.length) doSearch();
+}
+
+init();
+</script>
+</body>
+</html>
